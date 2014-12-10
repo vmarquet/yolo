@@ -14,6 +14,7 @@
 #define SEP_OR   2  // '||'
 #define SEP_NONE 3  // '&' n'impose pas de condition sur le résultat de la commande
 
+int status;
 
 int main () {
 
@@ -88,6 +89,7 @@ int main () {
 					break;
 			}
 			
+			//on recupère la commande sous forme de tableau
 			char **commande = malloc(sizeof(char*)*100);
 			int nb_arg = 0;
 			commande[nb_arg] = malloc(sizeof(char)*100);
@@ -119,6 +121,7 @@ int main () {
 			}
 			commande[nb_arg][a] = '\0';
 
+			//Derniere ligne NULL pour la fonction execvp
 			nb_arg++;
 			commande[nb_arg] = NULL;
 			
@@ -132,15 +135,14 @@ int main () {
 			/* Duplique ce processus. */
 			child_pid = fork ();
 			
-			if (child_pid != 0)
-				wait(NULL);
+			if (child_pid != 0){
+				//père, on attend que le fils se termine
+				waitpid(child_pid, &status, 0);
+				printf("%d\n", status);
+			}
 			else {
+				//fils, execution de la commande
 				execvp (commande[0], commande);
-				 
-				free(buffer2);
-				for (t = 0; t <= nb_arg; t++)
-					free(commande[t]);
-				free(commande);
 					   
 				return(0);
 			 }
