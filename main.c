@@ -12,19 +12,26 @@
 #define SEP_END  0  // ';'
 #define SEP_AND  1  // '&&'
 #define SEP_OR   2  // '||'
-#define SEP_NONE 3  // '&' n'impose pas de condition sur le résultat de la commande
+#define SEP_ET   3  // '&'
+#define SEP_NONE 4  // Pas de séparateur
 
 int status;
+int stop = false;
 
 int main () {
 
-	char* buffer = malloc(sizeof(char)*1000);
+	char* buffer;
+	char* username = getenv("USER");  // OK on Linux, don't know for other OS
 
 	while(true) {
 		// afficher le prompt
-		printf("> ");
+		if (username != NULL) 
+			printf("%s> ", username);
+		else
+			printf("> ");
 
 		// récupérer la ligne
+		buffer = malloc(sizeof(char)*1000);
 		fgets(buffer, 1000, stdin);
 
 		// debug: on printe la ligne
@@ -46,14 +53,14 @@ int main () {
 			while(j < 100 && i < 1000 && command_complete == false) {
 				switch(buffer[i]) {
 					case ';':
-					separator_after = SEP_END;
+						separator_after = SEP_END;
 						command_complete = true;
 						break;
 					case '&':
 						if(buffer[++i] == '&')
 							separator_after = SEP_AND;
 						else
-							separator_after = SEP_NONE;
+							separator_after = SEP_ET;
 						command_complete = true;
 						break;
 					case '|':
@@ -75,19 +82,6 @@ int main () {
 				i++;
 			}
 			buffer2[j] = '\0';
-
-			switch(separator_before) {
-				case SEP_NONE:
-				case SEP_END:
-					
-					break;
-				case SEP_AND:
-					
-					break;
-				case SEP_OR:
-					
-					break;
-			}
 			
 			//on recupère la commande sous forme de tableau
 			char **commande = malloc(sizeof(char*)*100);
@@ -134,15 +128,24 @@ int main () {
 			
 			/* Duplique ce processus. */
 			child_pid = fork ();
-			
+
 			if (child_pid != 0){
 				//père, on attend que le fils se termine
-				waitpid(child_pid, &status, 0);
-				printf("%d\n", status);
+				if (strcmp(commande[0], "exit") == 0){
+					return(0);
+				}
+
+				if (separator_after != SEP_ET){
+					waitpid(child_pid, &status, 0);
+
+					if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
+						stop = true;
+				}
 			}
 			else {
-				//fils, execution de la commande
-				execvp (commande[0], commande);
+				// on est dans le processus fils
+				if ((commande[0][0] != '\0' && strcmp(commande[0], "exit") != 0) && stop == false)
+					execvp (commande[0], commande);
 					   
 				return(0);
 			 }
@@ -154,11 +157,8 @@ int main () {
 			free(commande);
 		}
 
-		// "exit" => break;
-		// sinon, exec et c°
+		free(buffer);
+		stop = false;
 	}
-
-
-	free(buffer);
 	return 0;
 }
