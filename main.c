@@ -18,10 +18,14 @@
 int main () {
 
 	char* buffer = malloc(sizeof(char)*1000);
+	char* username = getenv("USER");  // OK on Linux, don't know for other OS
 
 	while(true) {
 		// afficher le prompt
-		printf("> ");
+		if (username != NULL) 
+			printf("%s> ", username);
+		else
+			printf("> ");
 
 		// récupérer la ligne
 		fgets(buffer, 1000, stdin);
@@ -134,11 +138,16 @@ int main () {
 			child_pid = fork ();
 			
 			if (child_pid != 0)
+				// on est dans le processus père
 				wait(NULL);
+				// on attend que le processus fils se termine
 			else {
+				// on est dans le processus fils
 				execvp (commande[0], commande);
-				 
+				
 				free(buffer2);
+				free(buffer);
+				free(username);
 				for (t = 0; t <= nb_arg; t++)
 					free(commande[t]);
 				free(commande);
@@ -159,5 +168,6 @@ int main () {
 
 
 	free(buffer);
+	free(username);
 	return 0;
 }
