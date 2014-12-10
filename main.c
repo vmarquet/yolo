@@ -103,9 +103,9 @@ int main () {
 			  {
 				while (buffer2[t+1] == '\t' || buffer2[t+1] == ' ')
 				  t++;
-				commande[nb_arg][a] = '\0';
 
 				if ((t+1) != j){
+				  commande[nb_arg][a] = '\0';
 				  nb_arg++;
 				  a = 0;
 				  commande[nb_arg] = malloc(sizeof(char)*100);
@@ -117,12 +117,11 @@ int main () {
 				a++;
 			  }
 			}
+			commande[nb_arg][a] = '\0';
+
 			nb_arg++;
 			commande[nb_arg] = NULL;
 			
-			printf("%s\n", buffer2);
-			for (t = 0; t < nb_arg; t++)
-				printf("%s\n",commande[t]);
 		
 			// le séparateur après la commande que l'on exécute
 			// deviendra au prochain tour le séparateur d'avant commande
