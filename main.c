@@ -137,7 +137,6 @@ int main () {
 
 				if (separator_after != SEP_ET){
 					waitpid(child_pid, &status, 0);
-
 					if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
 						stop = true;
 				}
@@ -145,8 +144,14 @@ int main () {
 			else {
 				// on est dans le processus fils
 				if ((commande[0][0] != '\0' && strcmp(commande[0], "exit") != 0) && stop == false)
-					execvp (commande[0], commande);
-					   
+				{
+					if (execvp (commande[0], commande) == -1);
+					{
+						printf("%s : commande introuvable\n", commande[0]);
+						exit(EXIT_FAILURE);
+					}
+    			}
+			
 				return(0);
 			 }
 			
