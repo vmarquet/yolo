@@ -1,6 +1,8 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
+#include  <sys/types.h>
+#include  <unistd.h>
 
 #define bool  int
 #define true  1
@@ -73,27 +75,82 @@ int main () {
 			}
 			buffer2[j] = '\0';
 
-			printf("  %s  ", buffer2);
-
 			switch(separator_before) {
 				case SEP_NONE:
 				case SEP_END:
-					printf("[exécuter tout le temps]");
+					
 					break;
 				case SEP_AND:
-					printf("[n'exécuter que si la commande précédente a réussi]");
+					
 					break;
 				case SEP_OR:
-					printf("[n'exécuter que si la commande précédente a échoué]");
+					
 					break;
 			}
-			printf("\n");
+			
+			char **commande = malloc(sizeof(char*)*100);
+			int nb_arg = 0;
+			commande[nb_arg] = malloc(sizeof(char)*100);
+			int a = 0;
+			int t = 0;
+			
+			while (buffer2[t] == '\t' || buffer2[t] == ' ')
+			  t++;
+			  
+			for (; t < j; t++)
+			{
+			  if (buffer2[t] == '\t' || buffer2[t] == ' ') 
+			  {
+				while (buffer2[t+1] == '\t' || buffer2[t+1] == ' ')
+				  t++;
+				commande[nb_arg][a] = '\0';
 
+				if ((t+1) != j){
+				  nb_arg++;
+				  a = 0;
+				  commande[nb_arg] = malloc(sizeof(char)*100);
+				}
+			  }
+			  else
+			  {
+			    commande[nb_arg][a] = buffer2[t];
+				a++;
+			  }
+			}
+			nb_arg++;
+			commande[nb_arg] = NULL;
+			
+			printf("%s\n", buffer2);
+			for (t = 0; t < nb_arg; t++)
+				printf("%s\n",commande[t]);
+		
 			// le séparateur après la commande que l'on exécute
 			// deviendra au prochain tour le séparateur d'avant commande
 			separator_before = separator_after;
+			
+			pid_t child_pid;
+			
+			/* Duplique ce processus. */
+			child_pid = fork ();
+			
+			if (child_pid != 0)
+				wait(NULL);
+			else {
+				execvp (commande[0], commande);
+				 
+				free(buffer2);
+				for (t = 0; t <= nb_arg; t++)
+					free(commande[t]);
+				free(commande);
+					   
+				return(0);
+			 }
+			
 
 			free(buffer2);
+			for (t = 0; t <= nb_arg; t++)
+			  free(commande[t]);
+			free(commande);
 		}
 
 		// "exit" => break;
