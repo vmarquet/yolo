@@ -100,7 +100,7 @@ int main () {
 			//on recupère la commande sous forme de tableau
 			char **commande = malloc(sizeof(char**)*100);
 
-			//on recupère la commande sous forme de tableau
+			//on recupère la commande2 sous forme de tableau
 			char **commande2 = malloc(sizeof(char**)*100);
 
 			int nb_arg = 0;
@@ -116,7 +116,9 @@ int main () {
 				
 			while (t < j && pipe1 == false)
 			{
-				if (buffer2[t] == '\t' || buffer2[t] == ' ') 
+				//si le caractere est un espace, c'est la fin de la commande, du parametre ou de l'option
+				//on passe à la sauvegarde du mot suivant dans la case suivante du tableau
+				if (buffer2[t] == '\t' || buffer2[t] == ' ')
 				{
 					while (buffer2[t+1] == '\t' || buffer2[t+1] == ' ')
 							t++;
@@ -128,7 +130,7 @@ int main () {
 						commande[nb_arg] = malloc(sizeof(char)*100);
 					}
 				}
-				else
+				else //sinon, le mot n'est pas fini, on continue à le stocker
 				{
 					//si on rencontre un pipe, on sort de la boucle
 					if (buffer2[t] == '|')
@@ -136,7 +138,7 @@ int main () {
 						pipe1 = true;
 						break;
 					}
-					else
+					else //si c'est un autre caractere, on le stocke
 					{
 						commande[nb_arg][a] = buffer2[t];
 						a++;
@@ -204,35 +206,45 @@ int main () {
 
 			if (child_pid != 0){
 				//Père
+
+				//si pas de pipe, on ne fait plus de fork
 				if (pipe1 == false)
 				{
-						if (strcmp(commande[0], "exit") == 0){
-							return(0);
-						}
+					//si exit on sort
+					if (strcmp(commande[0], "exit") == 0){
+						return(0);
+					}
 
-						if (separator_after != SEP_ET){
-							waitpid(child_pid, &status, 0);
-							if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
-								stop = true;
-						}
+					//on attend que le fils se termine et on voit si on doit continuer la boucle ou non
+					//et traiter la commande suivante
+					if (separator_after != SEP_ET){
+						waitpid(child_pid, &status, 0);
+						if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
+							stop = true;
+					}
 				}	
-				else{
+				else{ //on doit faire un 2eme fils pour executer la 2eme commande
 					waitpid(child_pid, &status, 0);
 
 					//Création 2nd fils
 					pid_t child_pid2;
 				
-					/* Duplique ce processus. */
 					child_pid2 = fork ();
 
 					if (child_pid2 != 0){
-						//père, on attend que le fils se termine
+						//super père
+
+						//on ne change pas les entrées ou sorties du super pere
 						close(tube[0]);
 						close(tube[1]);
+
+						//si commande exit, on sort
 						if (strcmp(commande2[0], "exit") == 0){
 							return(0);
 						}
 
+						//on attend que le fils se termine et on voit si on doit continuer la boucle ou non
+						//et traiter la commande suivante
 						if (separator_after != SEP_ET){
 							waitpid(child_pid2, &status2, 0);
 							if ((separator_after == SEP_OR && WEXITSTATUS(status2) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status2) != 0))
@@ -240,11 +252,12 @@ int main () {
 						}
 					}
 					else {
-						// on est dans le processus fils 2
+						// on est dans le processus fils 2, 2eme commande du pipe, on change son entrée
 						close(0);
 						close(tube[1]);
 						dup(tube[0]);
 
+						//execution de la 2eme commande
 						if ((commande2[0][0] != '\0' && strcmp(commande2[0], "exit") != 0) && stop == false)
 						{
 							if (execvp (commande2[0], commande2) == -1);
@@ -260,11 +273,14 @@ int main () {
 			}
 			else {
 				// on est dans le processus fils
+				//dans le cas du pipe, c'est la premiere commande à traiter, on change sa sortie
 				if (pipe1){
 					close(1);
 					close(tube[0]);
 					dup(tube[1]);
 				}
+
+				//execution de la commande
 
 				if ((commande[0][0] != '\0' && strcmp(commande[0], "exit") != 0) && stop == false)
 				{
