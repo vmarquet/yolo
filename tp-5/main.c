@@ -49,6 +49,7 @@ int main () {
 		int separator_before = SEP_NONE;
 		while(line_complete == false) {
 			// on récupère la prochaine commande
+			pipe1 = false;
 			char* buffer2 = malloc(sizeof(char)*100);
 			int j = 0;  // pointeur sur buffer2 pour ajouter un caractère
 
