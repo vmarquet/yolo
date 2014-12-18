@@ -150,6 +150,7 @@ int main () {
 			nb_arg++;
 			commande[nb_arg] = NULL;
 
+			//si pipe detecté, on recupère la commande qui suit
 			if (pipe1 == true)
 			{
 				a = 0;
@@ -188,20 +189,34 @@ int main () {
 			// deviendra au prochain tour le séparateur d'avant commande
 			separator_before = separator_after;
 
-			if (pipe1 == true)
-			{
-				int tube[2];
+			//on crée le tube seulement si il y a un pipe
 
+			int tube[2];
+			if (pipe1 == true){
 				if (pipe(tube) == -1)
 					return (-1);
+			}
 
-				pid_t child_pid;
-				
-				/* Duplique ce processus. */
-				child_pid = fork ();
+			pid_t child_pid;
+			
+			/* Duplique ce processus. */
+			child_pid = fork ();
 
-				if (child_pid != 0){
-					//Père
+			if (child_pid != 0){
+				//Père
+				if (pipe1 == false)
+				{
+						if (strcmp(commande[0], "exit") == 0){
+							return(0);
+						}
+
+						if (separator_after != SEP_ET){
+							waitpid(child_pid, &status, 0);
+							if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
+								stop = true;
+						}
+				}	
+				else{
 					waitpid(child_pid, &status, 0);
 
 					//Création 2nd fils
@@ -242,56 +257,25 @@ int main () {
 						return(0);
 					}
 				}
-				else {
-					// on est dans le processus fils
+			}
+			else {
+				// on est dans le processus fils
+				if (pipe1){
 					close(1);
 					close(tube[0]);
 					dup(tube[1]);
+				}
 
-					if ((commande[0][0] != '\0' && strcmp(commande[0], "exit") != 0) && stop == false)
+				if ((commande[0][0] != '\0' && strcmp(commande[0], "exit") != 0) && stop == false)
+				{
+					if (execvp (commande[0], commande) == -1);
 					{
-						if (execvp (commande[0], commande) == -1);
-						{
-							printf("%s : commande introuvable\n", commande[0]);
-							exit(EXIT_FAILURE);
-						}
-					}
-				
-					return(0);
-				}
-			}
-			else
-			{
-				pid_t child_pid;
-				
-				/* Duplique ce processus. */
-				child_pid = fork ();
-
-				if (child_pid != 0){
-					//père, on attend que le fils se termine
-					if (strcmp(commande[0], "exit") == 0){
-						return(0);
-					}
-
-					if (separator_after != SEP_ET){
-						waitpid(child_pid, &status, 0);
-						if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
-							stop = true;
+						printf("%s : commande introuvable\n", commande[0]);
+						exit(EXIT_FAILURE);
 					}
 				}
-				else {
-					// on est dans le processus fils
-					if ((commande[0][0] != '\0' && strcmp(commande[0], "exit") != 0) && stop == false)
-					{
-						if (execvp (commande[0], commande) == -1);
-						{
-							printf("%s : commande introuvable\n", commande[0]);
-							exit(EXIT_FAILURE);
-						}
-					}
-				
-					return(0);
-				}
+			
+				return(0);
 			}
 
 			free(buffer2);
