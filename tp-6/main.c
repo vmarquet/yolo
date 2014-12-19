@@ -1,7 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
+#include <ctype.h>  // pour isdigit(), isalpha()
+#include <unistd.h>  // pour fork()
+#include <sys/types.h> 
+#include <sys/ipc.h> 
+#include <sys/shm.h>
 
 
 int sum(char);
@@ -12,13 +16,32 @@ int somme = 0;
 
 
 int main() {
+	// we create the shared memory
+	size_t shared_segment_size = sizeof(int);
+	int segment_id = shmget(IPC_PRIVATE, shared_segment_size, IPC_CREAT | IPC_EXCL | 0600);
+	if (segment_id == -1) {
+		perror("ERROR: shmget failed ");
+		return (EXIT_FAILURE);
+	}
+
+	// we attach it (montage en mémoire)
+	int* shared_memory = (int*) shmat(segment_id, NULL, 0);
+	if (shared_memory == (int*)0xFFFFFFFF) {
+		perror("ERROR: shmat failed ");
+		return (EXIT_FAILURE);
+	}
+	printf("shared memory attached at address %p \n", shared_memory);
+
+	// we access it
+	shared_memory[0] = 0;
+
 	// first fork: the translate function
 	pid_t pid = fork();
 	if (pid == -1) {
 		printf("ERROR: fork failed \n");
 		return EXIT_FAILURE;
 	}
-	else if (pid > 0) {
+	else if (pid == 0) {
 		// we are in the child process
 		// while(1)
 		// 	translate(c);
@@ -31,7 +54,7 @@ int main() {
 		printf("ERROR: fork failed \n");
 		return EXIT_FAILURE;
 	}
-	else if (pid > 0) {
+	else if (pid == 0) {
 		// we are in the child process
 		// while(1)
 		// 	sum(c);
@@ -66,7 +89,7 @@ char translate(char c) {
 }
 
 int dispatcher() {
-	char c = fgetc(stdin);
+	int c = fgetc(stdin);
 	if (c == EOF)
 		return 0;
 	else if (isdigit(c) != 0) {
