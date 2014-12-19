@@ -12,6 +12,33 @@ int somme = 0;
 
 
 int main() {
+	// first fork: the translate function
+	pid_t pid = fork();
+	if (pid == -1) {
+		printf("ERROR: fork failed \n");
+		return EXIT_FAILURE;
+	}
+	else if (pid > 0) {
+		// we are in the child process
+		// while(1)
+		// 	translate(c);
+		return EXIT_SUCCESS;
+	}
+
+	// second fork: the sum function
+	pid = fork();
+	if (pid == -1) {
+		printf("ERROR: fork failed \n");
+		return EXIT_FAILURE;
+	}
+	else if (pid > 0) {
+		// we are in the child process
+		// while(1)
+		// 	sum(c);
+		return EXIT_SUCCESS;
+	}
+
+	// program's main loop
 	while(1)
 		if(dispatcher() == 0)
 			break;
