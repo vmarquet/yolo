@@ -13,10 +13,14 @@
 #define SEP_AND  1  // '&&'
 #define SEP_OR   2  // '||'
 #define SEP_ET   3  // '&'
-#define SEP_NONE 4  // Pas de séparateur
+#define SEP_NONE 5  // Pas de séparateur
 
 int status;
+int status2;
 int stop = false;
+bool pipe1 = false;
+
+
 
 int main () {
 
@@ -24,6 +28,7 @@ int main () {
 	char* username = getenv("USER");  // OK on Linux, don't know for other OS
 
 	while(true) {
+		pipe1 = false;
 		// afficher le prompt
 		if (username != NULL) 
 			printf("%s> ", username);
@@ -44,6 +49,7 @@ int main () {
 		int separator_before = SEP_NONE;
 		while(line_complete == false) {
 			// on récupère la prochaine commande
+			pipe1 = false;
 			char* buffer2 = malloc(sizeof(char)*100);
 			int j = 0;  // pointeur sur buffer2 pour ajouter un caractère
 
@@ -64,9 +70,17 @@ int main () {
 						command_complete = true;
 						break;
 					case '|':
-						if(buffer[++i] == '|')
+						if(buffer[i+1] == '|')
+						{
+							i++;
 							separator_after = SEP_OR;
 							command_complete = true;
+						}
+						else
+						{
+							buffer2[j] = buffer[i];
+							j++;
+						}
 						break;
 					case '\n':
 					case '\0':
@@ -84,65 +98,190 @@ int main () {
 			buffer2[j] = '\0';
 			
 			//on recupère la commande sous forme de tableau
-			char **commande = malloc(sizeof(char*)*100);
+			char **commande = malloc(sizeof(char**)*100);
+
+			//on recupère la commande2 sous forme de tableau
+			char **commande2 = malloc(sizeof(char**)*100);
+
 			int nb_arg = 0;
 			commande[nb_arg] = malloc(sizeof(char)*100);
+
+			int nb_arg2 = 0;
+			commande2[nb_arg2] = malloc(sizeof(char)*100);
 			int a = 0;
 			int t = 0;
 			
 			while (buffer2[t] == '\t' || buffer2[t] == ' ')
 				t++;
 				
-			for (; t < j; t++)
+			while (t < j && pipe1 == false)
 			{
-				if (buffer2[t] == '\t' || buffer2[t] == ' ') 
+				//si le caractere est un espace, c'est la fin de la commande, du parametre ou de l'option
+				//on passe à la sauvegarde du mot suivant dans la case suivante du tableau
+				if (buffer2[t] == '\t' || buffer2[t] == ' ')
 				{
 					while (buffer2[t+1] == '\t' || buffer2[t+1] == ' ')
 							t++;
 
-					if ((t+1) != j) {
+					if ((t+1) != j && buffer2[t+1] != '|'){
 						commande[nb_arg][a] = '\0';
 						nb_arg++;
 						a = 0;
 						commande[nb_arg] = malloc(sizeof(char)*100);
 					}
 				}
-				else
+				else //sinon, le mot n'est pas fini, on continue à le stocker
 				{
-					commande[nb_arg][a] = buffer2[t];
-					a++;
+					//si on rencontre un pipe, on sort de la boucle
+					if (buffer2[t] == '|')
+					{
+						pipe1 = true;
+						break;
+					}
+					else //si c'est un autre caractere, on le stocke
+					{
+						commande[nb_arg][a] = buffer2[t];
+						a++;
+					}
 				}
+				t++;
 			}
 			commande[nb_arg][a] = '\0';
 
 			//Derniere ligne NULL pour la fonction execvp
 			nb_arg++;
 			commande[nb_arg] = NULL;
-			
+
+			//si pipe detecté, on recupère la commande qui suit
+			if (pipe1 == true)
+			{
+				a = 0;
+				t++;
+				while (buffer2[t] == '\t' || buffer2[t] == ' ')
+					t++;
+					
+				for (; t < j; t++)
+				{
+					if (buffer2[t] == '\t' || buffer2[t] == ' ') 
+					{
+						while (buffer2[t+1] == '\t' || buffer2[t+1] == ' ')
+								t++;
+
+						if ((t+1) != j) {
+							commande2[nb_arg2][a] = '\0';
+							nb_arg2++;
+							a = 0;
+							commande2[nb_arg2] = malloc(sizeof(char)*100);
+						}
+					}
+					else
+					{
+						commande2[nb_arg2][a] = buffer2[t];
+						a++;
+					}
+				}
+				commande2[nb_arg2][a] = '\0';
+
+				//Derniere ligne NULL pour la fonction execvp
+				nb_arg2++;
+				commande2[nb_arg2] = NULL;
+			}			
 		
 			// le séparateur après la commande que l'on exécute
 			// deviendra au prochain tour le séparateur d'avant commande
 			separator_before = separator_after;
-			
+
+			//on crée le tube seulement si il y a un pipe
+
+			int tube[2];
+			if (pipe1 == true){
+				if (pipe(tube) == -1)
+					return (-1);
+			}
+
 			pid_t child_pid;
 			
 			/* Duplique ce processus. */
 			child_pid = fork ();
 
 			if (child_pid != 0){
-				//père, on attend que le fils se termine
-				if (strcmp(commande[0], "exit") == 0){
-					return(0);
-				}
+				//Père
 
-				if (separator_after != SEP_ET){
+				//si pas de pipe, on ne fait plus de fork
+				if (pipe1 == false)
+				{
+					//si exit on sort
+					if (strcmp(commande[0], "exit") == 0){
+						return(0);
+					}
+
+					//on attend que le fils se termine et on voit si on doit continuer la boucle ou non
+					//et traiter la commande suivante
+					if (separator_after != SEP_ET){
+						waitpid(child_pid, &status, 0);
+						if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
+							stop = true;
+					}
+				}	
+				else{ //on doit faire un 2eme fils pour executer la 2eme commande
 					waitpid(child_pid, &status, 0);
-					if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
-						stop = true;
+
+					//Création 2nd fils
+					pid_t child_pid2;
+				
+					child_pid2 = fork ();
+
+					if (child_pid2 != 0){
+						//super père
+
+						//on ne change pas les entrées ou sorties du super pere
+						close(tube[0]);
+						close(tube[1]);
+
+						//si commande exit, on sort
+						if (strcmp(commande2[0], "exit") == 0){
+							return(0);
+						}
+
+						//on attend que le fils se termine et on voit si on doit continuer la boucle ou non
+						//et traiter la commande suivante
+						if (separator_after != SEP_ET){
+							waitpid(child_pid2, &status2, 0);
+							if ((separator_after == SEP_OR && WEXITSTATUS(status2) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status2) != 0))
+								stop = true;
+						}
+					}
+					else {
+						// on est dans le processus fils 2, 2eme commande du pipe, on change son entrée
+						close(0);
+						close(tube[1]);
+						dup(tube[0]);
+
+						//execution de la 2eme commande
+						if ((commande2[0][0] != '\0' && strcmp(commande2[0], "exit") != 0) && stop == false)
+						{
+							if (execvp (commande2[0], commande2) == -1);
+							{
+								printf("%s : commande introuvable\n", commande2[0]);
+								exit(EXIT_FAILURE);
+							}
+						}
+					
+						return(0);
+					}
 				}
 			}
 			else {
 				// on est dans le processus fils
+				//dans le cas du pipe, c'est la premiere commande à traiter, on change sa sortie
+				if (pipe1){
+					close(1);
+					close(tube[0]);
+					dup(tube[1]);
+				}
+
+				//execution de la commande
+
 				if ((commande[0][0] != '\0' && strcmp(commande[0], "exit") != 0) && stop == false)
 				{
 					if (execvp (commande[0], commande) == -1);
@@ -154,12 +293,17 @@ int main () {
 			
 				return(0);
 			}
-			
 
 			free(buffer2);
 			for (t = 0; t <= nb_arg; t++)
 				free(commande[t]);
 			free(commande);
+			if (pipe1 == true)
+			{
+				for (t = 0; t <= nb_arg2; t++)
+					free(commande2[t]);
+				free(commande2);
+			}
 		}
 
 		free(buffer);
