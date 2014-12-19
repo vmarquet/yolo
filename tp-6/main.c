@@ -1,3 +1,7 @@
+// TP 6  INF4033  ESIEA
+// MARQUET Vincent
+// HASSAN  Mérivan
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,7 +23,8 @@ int dispatcher();
 void kill_childs(int);
 
 int* shared_memory = NULL;
-struct sembuf operation;
+struct sembuf operation_translate;
+struct sembuf operation_sum;
 int sem_id;
 pid_t pid_translate;
 pid_t pid_sum;
@@ -50,7 +55,7 @@ int main() {
 	// shared_memory[0] = ...;  int ... = shared_memory[0];
 
 	// we create the semaphore
-	sem_id = semget(IPC_PRIVATE, 1, IPC_CREAT | IPC_EXCL | 0600); // 1 semaphore, 0600 = droits
+	sem_id = semget(IPC_PRIVATE, 2, IPC_CREAT | IPC_EXCL | 0600); // 1 semaphore, 0600 = droits
 	if (sem_id < 0) {
 		perror("ERROR: semget failed ");
 		return (EXIT_FAILURE);
@@ -58,25 +63,22 @@ int main() {
 
 	// to affect a value to the semaphore
 	semctl(sem_id, 0, SETVAL, 1);
-	// arg 2: on a créé 1 sémaphore donc son numéro est 0
+	semctl(sem_id, 1, SETVAL, 1);
+	// arg 2: on a créé 2 sémaphores donc leurs numéros sont 0 et 1
 	// arg 3: SETVAL <=> on veut changer une valeur, ça implique quelle sera de type int
 	// arg 4: valeur que l'on veut affecter au semaphore
 	// cf http://www.commentcamarche.net/faq/11267-utilisation-des-semaphores-systeme-v
 
 	// les opérations dans les semaphores doivent être modélisées dans une structure
-	operation.sem_num = 0;  // Numéro de notre sémaphore: le premier et le seul
-	operation.sem_op = -1;  // Pour un P() (prendre le mutex) on décrémente
-	operation.sem_flg = 0;  // paramètres optionnels, on ne s'en occupe pas
+	operation_translate.sem_num = 0;  // Numéro de notre sémaphore
+	operation_translate.sem_op = -1;  // Pour un P() (prendre le mutex) on décrémente
+	operation_translate.sem_flg = 0;  // paramètres optionnels, on ne s'en occupe pas
+	// idem pour le second semaphore
+	operation_sum.sem_num = 1;
+	operation_sum.sem_op = -1;
+	operation_sum.sem_flg = 0;
 
-	// pour prendre le mutex
-	// operation.sem_op = 1;
-	// semop(sem_id, &operation, 1);
-
-	// pour libérer le mutex
-	// operation.sem_op = -1;
-	// semop(sem_id, &operation, 1);
-
-	shared_memory[1] = FLAG_JOB_DONE;  // truc tordu
+	shared_memory[1] = FLAG_JOB_DONE;
 
 	// first fork: the translate function
 	pid_translate = fork();
@@ -133,8 +135,8 @@ void kill_childs(int sig) {
 void sum() {
 	while(1) {
 		// on prend le mutex
-		operation.sem_op = 1;
-		semop(sem_id, &operation, 1);
+		operation_sum.sem_op = 1;
+		semop(sem_id, &operation_sum, 1);
 
 		if (shared_memory[1] == FLAG_USE_SUM) {
 			char c = (char)shared_memory[0];
@@ -149,8 +151,8 @@ void sum() {
 		}
 
 		// on libère le mutex
-		operation.sem_op = -1;
-		semop(sem_id, &operation, 1);
+		operation_sum.sem_op = -1;
+		semop(sem_id, &operation_sum, 1);
 	}
 
 	return;
@@ -159,8 +161,8 @@ void sum() {
 void translate() {
 	while(1) {
 		// on prend le mutex
-		operation.sem_op = 1;
-		semop(sem_id, &operation, 1);
+		operation_translate.sem_op = 1;
+		semop(sem_id, &operation_translate, 1);
 
 		if (shared_memory[1] == FLAG_USE_TRANSLATE) {
 			char c = (char)shared_memory[0];
@@ -178,8 +180,8 @@ void translate() {
 		}
 
 		// on libère le mutex
-		operation.sem_op = -1;
-		semop(sem_id, &operation, 1);
+		operation_translate.sem_op = -1;
+		semop(sem_id, &operation_translate, 1);
 	}
 	return;
 }
@@ -204,20 +206,40 @@ int dispatcher() {
 		task = FLAG_USE_TRANSLATE;
 	}
 
-	// on libère le mutex
-	operation.sem_op = -1;
-	semop(sem_id, &operation, 1);
+	// on libère le mutex approprié
+	if (task == FLAG_USE_SUM) {
+		operation_sum.sem_op = -1;
+		semop(sem_id, &operation_sum, 1);
+	}
+	else {
+		operation_translate.sem_op = -1;
+		semop(sem_id, &operation_translate, 1);
+	}
 
 	// tant que le job n'est pas fait, on laisse le mutex libre
 	while(1) {
 		// on reprend le mutex
-		operation.sem_op = 1;
-		semop(sem_id, &operation, 1);
+		if (task == FLAG_USE_SUM) {
+			operation_sum.sem_op = 1;
+			semop(sem_id, &operation_sum, 1);
+		}
+		else {
+			operation_translate.sem_op = 1;
+			semop(sem_id, &operation_translate, 1);
+		}
+		
 
 		if (shared_memory[1] != FLAG_JOB_DONE) {
-			// on libère le mutex
-			operation.sem_op = -1;
-			semop(sem_id, &operation, 1);
+			// l'autre processus n'a pas encore fait le boulot,
+			// donc on libère le mutex
+			if (task == FLAG_USE_SUM) {
+				operation_sum.sem_op = -1;
+				semop(sem_id, &operation_sum, 1);
+			}
+			else {
+				operation_translate.sem_op = -1;
+				semop(sem_id, &operation_translate, 1);
+			}
 		}
 		else
 			break;
