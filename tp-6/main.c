@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 
 int sum(char);
@@ -12,7 +13,9 @@ int somme = 0;
 
 int main() {
 	while(1)
-		dispatcher();
+		if(dispatcher() == 0)
+			break;
+
 	return EXIT_SUCCESS;
 }
 
@@ -40,7 +43,7 @@ int dispatcher() {
 	if (c == EOF)
 		return 0;
 	else if (isdigit(c) != 0) {
-		printf("%d", sum(c));
+		printf("%d ", sum(c));
 		fflush(stdout);
 	}
 	else {
