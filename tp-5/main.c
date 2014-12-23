@@ -1,8 +1,12 @@
+// Merivan Hassan
+// Vincent Marquet
+
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include  <sys/types.h>
 #include  <unistd.h>
+#include <signal.h>
 
 #define bool  int
 #define true  1
@@ -20,12 +24,39 @@ int status2;
 int stop = false;
 bool pipe1 = false;
 
+pid_t childpid;
+pid_t pausepid[100];
+int pauspid = 0;
 
+void handler(int signum)
+{ 
+    switch(signum)
+    {
+        case SIGTSTP:
+            pausepid[pauspid] = childpid;
+        		printf("\nProcessus en pause : %d\n", pausepid[pauspid]);
+        		kill(pausepid[pauspid], SIGTSTP);  
+        		pauspid++;      		
+            break;     
+        case SIGINT:
+        		printf("\nProcessus interrompu : %d\n", childpid);
+        		kill(childpid, SIGTERM);
+            break;
+    }
+}
 
 int main () {
 
 	char* buffer;
 	char* username = getenv("USER");  // OK on Linux, don't know for other OS
+	
+  struct sigaction signaux;
+        
+  signaux.sa_handler = handler;
+  signaux.sa_flags = 0;
+  sigemptyset(&signaux.sa_mask);
+  
+  printf("Bonjour : %s !\nVeuillez utiliser la commande \"exit\" pour quitter le shell\n", username);
 
 	while(true) {
 		pipe1 = false;
@@ -203,22 +234,30 @@ int main () {
 			
 			/* Duplique ce processus. */
 			child_pid = fork ();
+			
+			signal(SIGCHLD, SIG_IGN);
 
 			if (child_pid != 0){
 				//Père
-
+        childpid = child_pid;
+        
+        sigaction(SIGTSTP,&signaux,NULL); //ctrl-Z 
+        sigaction(SIGINT,&signaux,NULL); //ctrl-C 
+          
 				//si pas de pipe, on ne fait plus de fork
 				if (pipe1 == false)
 				{
 					//si exit on sort
 					if (strcmp(commande[0], "exit") == 0){
+					  printf("Au revoir et à bientôt !\n");
 						return(0);
 					}
 
 					//on attend que le fils se termine et on voit si on doit continuer la boucle ou non
 					//et traiter la commande suivante
 					if (separator_after != SEP_ET){
-						waitpid(child_pid, &status, 0);
+						waitpid(child_pid, &status, 0); 
+
 						if ((separator_after == SEP_OR && WEXITSTATUS(status) == 0) || (separator_after == SEP_AND && WEXITSTATUS(status) != 0))
 							stop = true;
 					}
@@ -240,6 +279,7 @@ int main () {
 
 						//si commande exit, on sort
 						if (strcmp(commande2[0], "exit") == 0){
+						  printf("Au revoir et à bientôt !\n");
 							return(0);
 						}
 
@@ -279,18 +319,30 @@ int main () {
 					close(tube[0]);
 					dup(tube[1]);
 				}
-
 				//execution de la commande
+			
 
-				if ((commande[0][0] != '\0' && strcmp(commande[0], "exit") != 0) && stop == false)
+				if ((commande[0][0] != '\0' && strcmp(commande[0], "fg") != 0 && strcmp(commande[0], "bg") != 0 && strcmp(commande[0], "exit") != 0) && stop == false)
 				{
-					if (execvp (commande[0], commande) == -1);
-					{
+					if (execvp (commande[0], commande) == -1)
+					{ 
 						printf("%s : commande introuvable\n", commande[0]);
 						exit(EXIT_FAILURE);
 					}
-				}
-			
+				}	
+				
+				int bouclefbg;
+				
+				if (strcmp(commande[0], "fg") == 0 && pauspid != 0){
+				  for (bouclefbg = 0; bouclefbg <= pauspid; bouclefbg++)
+			      kill(pausepid[bouclefbg], SIGCONT);
+			  }
+			  
+			  if (strcmp(commande[0], "bg") == 0 && pauspid != 0){
+				  for (bouclefbg = 0; bouclefbg <= pauspid; bouclefbg++)
+			      kill(pausepid[bouclefbg], SIGCONT);
+			  }
+
 				return(0);
 			}
 
